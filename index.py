@@ -4,8 +4,11 @@ from requests_aws4auth import AWS4Auth
 from sys import argv
 
 
-def get_text(bucket_name, object_name):
+def get_text(bucket_name, object_name, debug=True):
     textract = BotoClient('textract')
+
+    if debug:
+        print("Detecting text of " + object_name)
 
     response = textract.detect_document_text(
         Document={
@@ -19,15 +22,25 @@ def get_text(bucket_name, object_name):
     for item in response["Blocks"]:
         if item["BlockType"] == "LINE":
             text += item["Text"]
+    if debug:
+        print(text)
     return text
 
 
-def index_bucket(bucket_name, elasticsearch_host):
+def index_bucket(bucket_name, elasticsearch_host, debug=True):
     s3_client = BotoClient("s3")
-    api_response = s3_client.list_objects_v2(Bucket=bucket_name)
-    object_list = api_response.get("Contents")
+    paginator = s3_client.get_paginator('list_objects_v2')
+    result_pages = paginator.paginate(Bucket=bucket_name)
 
-    file_object_names = [object['Key'] for object in object_list if object['Size'] > 0]
+    file_object_names = []
+    for page in result_pages:
+        for s3_object in page['Contents']:
+            if s3_object['Size'] > 0:
+                file_object_names.append(s3_object['Key'])
+
+    if debug:
+        print("Detected " + str(len(file_object_names)) + " objects for indexing.")
+
     return [
         index_document(
             bucket_name, elasticsearch_host, file_object_name, get_text(bucket_name, file_object_name)
@@ -48,20 +61,20 @@ def index_document(bucket_name, elasticsearch_host, object_name, text):
         )
 
         elastic_search = Elasticsearch(
-            hosts = [{'host': elasticsearch_host, 'port': 443}],
-            http_auth = awsauth,
-            use_ssl = True,
-            verify_certs = True,
-            connection_class = RequestsHttpConnection
+            hosts=[{'host': elasticsearch_host, 'port': 443}],
+            http_auth=awsauth,
+            use_ssl=True,
+            verify_certs=True,
+            connection_class=RequestsHttpConnection
         )
 
         document = {
             "name": "{}".format(object_name),
-            "bucket" : "{}".format(bucket_name),
-            "content" : text
+            "bucket": "{}".format(bucket_name),
+            "content": text
         }
 
-        elastic_search.index(index="textract", doc_type="document", id=object_name, body=document)
+        elastic_search.index(index="textract", doc_type="document", id=object_name, document=document)
 
         return "Indexed document: {}".format(object_name)
     else:
