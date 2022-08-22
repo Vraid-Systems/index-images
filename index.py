@@ -1,3 +1,9 @@
+###
+# index-images
+# based on https://aws.amazon.com/blogs/machine-learning/automatically-extract-text-and-structured-data-from-documents-with-amazon-textract/
+# pip3 install elasticsearch==7.13.4
+
+
 from boto3 import client as BotoClient, Session as BotoSession
 from elasticsearch import Elasticsearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
@@ -74,7 +80,7 @@ def index_document(bucket_name, elasticsearch_host, object_name, text):
             "content": text
         }
 
-        elastic_search.index(index="textract", doc_type="document", id=object_name, document=document)
+        elastic_search.index(index="textract", doc_type="document", id=object_name, body=document)
 
         return "Indexed document: {}".format(object_name)
     else:
