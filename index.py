@@ -49,42 +49,42 @@ def index_bucket(bucket_name, elasticsearch_host, debug=True):
 
     return [
         index_document(
-            bucket_name, elasticsearch_host, file_object_name, get_text(bucket_name, file_object_name)
+            bucket_name, elasticsearch_host, file_object_name
         )
         for file_object_name in file_object_names
     ]
 
 
-def index_document(bucket_name, elasticsearch_host, object_name, text):
-    if text:
-        boto_session = BotoSession()
-        credentials = boto_session.get_credentials()
-        region = boto_session.region_name
+def index_document(bucket_name, elasticsearch_host, object_name):
+    boto_session = BotoSession()
+    credentials = boto_session.get_credentials()
+    region = boto_session.region_name
 
-        awsauth = AWS4Auth(
-            credentials.access_key, credentials.secret_key,
-            region, 'es', session_token=credentials.token
-        )
+    awsauth = AWS4Auth(
+        credentials.access_key, credentials.secret_key,
+        region, 'es', session_token=credentials.token
+    )
 
-        elastic_search = Elasticsearch(
-            hosts=[{'host': elasticsearch_host, 'port': 443}],
-            http_auth=awsauth,
-            use_ssl=True,
-            verify_certs=True,
-            connection_class=RequestsHttpConnection
-        )
+    elastic_search = Elasticsearch(
+        hosts=[{'host': elasticsearch_host, 'port': 443}],
+        http_auth=awsauth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection
+    )
 
-        document = {
-            "name": "{}".format(object_name),
-            "bucket": "{}".format(bucket_name),
-            "content": text
-        }
+    if elastic_search.exists(index="textract", id=object_name):
+        return "Existing document: {}".format(object_name)
 
-        elastic_search.index(index="textract", doc_type="document", id=object_name, body=document)
+    document = {
+        "name": "{}".format(object_name),
+        "bucket": "{}".format(bucket_name),
+        "content": get_text(bucket_name, object_name)
+    }
 
-        return "Indexed document: {}".format(object_name)
-    else:
-        return False
+    elastic_search.index(index="textract", doc_type="document", id=object_name, body=document)
+
+    return "Indexed document: {}".format(object_name)
 
 
 print("S3BucketName ElasticSearchHost")
